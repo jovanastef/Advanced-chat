@@ -20,16 +20,18 @@ public class Resurs implements Serializable {
     private Time radnoVremePocetak;
     @JsonbDateFormat("HH:mm:ss")
     private Time radnoVremeKraj;
+    private double cenaPoTerminu;
     
     public Resurs() {
     }
 
-    public Resurs(int id, String naziv, String tip, Time radnoVremePocetak, Time radnoVremeKraj) {
+    public Resurs(int id, String naziv, String tip, Time radnoVremePocetak, Time radnoVremeKraj, double cenaPoTerminu) {
         this.id = id;
         this.naziv = naziv;
         this.tip = tip;
         this.radnoVremePocetak = radnoVremePocetak;
         this.radnoVremeKraj = radnoVremeKraj;
+        this.cenaPoTerminu = cenaPoTerminu;
     }
 
     public Resurs(String naziv, String tip, Time radnoVremePocetak, Time radnoVremeKraj) {
@@ -79,6 +81,15 @@ public class Resurs implements Serializable {
         this.radnoVremeKraj = radnoVremeKraj;
     }
 
+    public double getCenaPoTerminu() {
+        return cenaPoTerminu;
+    }
+
+    public void setCenaPoTerminu(double cenaPoTerminu) {
+        this.cenaPoTerminu = cenaPoTerminu;
+    }
+
+    
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -88,6 +99,7 @@ public class Resurs implements Serializable {
         sb.append(", tip=").append(tip);
         sb.append(", radnoVremePocetak=").append(radnoVremePocetak);
         sb.append(", radnoVremeKraj=").append(radnoVremeKraj);
+        sb.append(", cenaPoTerminu=").append(cenaPoTerminu);
         sb.append('}');
         return sb.toString();
     }

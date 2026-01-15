@@ -22,11 +22,12 @@ public class Rezervacija implements Serializable {
     private String status; // AKTIVNA, OBRISANA, ZAVRSENA
     @JsonbTransient
     private RezervacionaSerija serija;
+    private double cenaTransakcije;
     
     public Rezervacija() {
     }
 
-    public Rezervacija(int id, Korisnik korisnik, Resurs resurs, Date datumPocetka, Date datumKraja, String status, RezervacionaSerija serija) {
+    public Rezervacija(int id, Korisnik korisnik, Resurs resurs, Date datumPocetka, Date datumKraja, String status, RezervacionaSerija serija, double cenaTransakcije) {
         this.id = id;
         this.korisnik = korisnik;
         this.resurs = resurs;
@@ -34,7 +35,10 @@ public class Rezervacija implements Serializable {
         this.datumKraja = datumKraja;
         this.status = status;
         this.serija = serija;
+        this.cenaTransakcije = cenaTransakcije;
     }
+
+    
 
     public Rezervacija(Korisnik korisnik, Resurs resurs, Date datumPocetka, Date datumKraja) {
         this.korisnik = korisnik;
@@ -100,6 +104,16 @@ public class Rezervacija implements Serializable {
         this.serija = serija;
     }
 
+    public double getCenaTransakcije() {
+        return cenaTransakcije;
+    }
+
+    public void setCenaTransakcije(double cenaTransakcije) {
+        this.cenaTransakcije = cenaTransakcije;
+    }
+    
+    
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -110,6 +124,7 @@ public class Rezervacija implements Serializable {
         sb.append(", datumPocetka=").append(datumPocetka);
         sb.append(", datumKraja=").append(datumKraja);
         sb.append(", status=").append(status);
+        sb.append(", cenaTransakcije=").append(cenaTransakcije);
         sb.append(", serija=").append(serija != null ? serija.getId() : "null");
         sb.append('}');
         return sb.toString();

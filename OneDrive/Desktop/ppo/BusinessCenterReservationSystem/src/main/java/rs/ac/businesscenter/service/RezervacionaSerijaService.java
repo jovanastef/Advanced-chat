@@ -47,17 +47,30 @@ public class RezervacionaSerijaService {
             try {
                 con.setAutoCommit(false); // Počinjemo transakciju
                 
-                // 1. Kreiranje i snimanje zaglavlja serije
+                //Izračunavanje koliko će termina biti kreirano
+                int brojTermina = izracunajBrojTermina(pocetak, doDatuma, frekvencija);
+                double cenaPoTerminu = resurs.getCenaPoTerminu();
+
+                //Obračun ukupne cene
+                double ukupnaCena = brojTermina * cenaPoTerminu;
+
+                //Procesuiranje plaćanja (skidanje novca)
+                // Koristimo "Internal" metodu jer prosleđujemo trenutnu konekciju 'con'
+                KorisnikService.getInstance().procesuirajPlacanjeInternal(korisnik.getId(), ukupnaCena, con);
+                
+                //Kreiranje i snimanje zaglavlja serije
                 RezervacionaSerija serija = new RezervacionaSerija();
                 serija.setKorisnik(korisnik);
                 serija.setResurs(resurs);
                 serija.setFrekvencija(frekvencija);
                 serija.setDatumPocetka(pocetak);
                 serija.setDatumKraja(doDatuma);
+                serija.setUkupnaCena(ukupnaCena);
+                serija.setStatus("AKTIVNA");
                 
                 serijaDao.insert(serija, con);
                 
-                // 2. Generisanje individualnih rezervacija
+                //Generisanje individualnih rezervacija
                 Calendar cal = Calendar.getInstance();
                 cal.setTime(pocetak);
                 long trajanjeTermina = kraj.getTime() - pocetak.getTime();
@@ -86,6 +99,7 @@ public class RezervacionaSerijaService {
                     rez.setDatumPocetka(trenutniPocetak);
                     rez.setDatumKraja(trenutniKraj);
                     rez.setStatus("AKTIVNA");
+                    rez.setCenaTransakcije(cenaPoTerminu);
                     rez.setSerija(serija); // Povezujemo sa serijom
                     
                     rezervacijaDao.insert(rez, con);
@@ -106,6 +120,25 @@ public class RezervacionaSerijaService {
         }
     }
 
+    //Pomoćna metoda koja simulira generisanje termina da bi odredila tačan broj za naplatu
+    private int izracunajBrojTermina(Date pocetak, Date doDatuma, String frekvencija) {
+        int count = 0;
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(pocetak);
+
+        while (!cal.getTime().after(doDatuma)) {
+            int danUNedelji = cal.get(Calendar.DAY_OF_WEEK);
+            if ("RADNI_DANI".equals(frekvencija)
+                    && (danUNedelji == Calendar.SATURDAY || danUNedelji == Calendar.SUNDAY)) {
+                cal.add(Calendar.DATE, 1);
+                continue;
+            }
+            count++;
+            pomeriKalendar(cal, frekvencija);
+        }
+        return count;
+    }
+    
     private void pomeriKalendar(Calendar cal, String frekvencija) {
         switch (frekvencija) {
             case "DNEVNO":

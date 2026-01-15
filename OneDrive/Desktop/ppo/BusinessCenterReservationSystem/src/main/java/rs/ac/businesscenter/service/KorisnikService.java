@@ -83,4 +83,39 @@ public class KorisnikService {
             throw new BusinessCenterException("Greška prilikom registracije korisnika", ex);
         }
     }
+    
+    //Interna metoda koju koristiš unutar transakcija (npr. u RezervacionaSerijaService)
+    public void procesuirajPlacanjeInternal(int korisnikId, double iznos, Connection con) throws BusinessCenterException, SQLException {
+        Korisnik k = korisnikDao.findById(korisnikId, con); 
+
+        if (k == null) {
+            throw new BusinessCenterException("Korisnik nije pronađen.");
+        }
+
+        if (k.getNovac() < iznos) {
+            throw new BusinessCenterException("Nedovoljno sredstava. Potrebno: " + iznos + ", imate: " + k.getNovac());
+        }
+
+        double noviBalans = k.getNovac() - iznos;
+        // Pozivamo DAO metodu koju smo upravo napravili
+        korisnikDao.updateNovac(korisnikId, noviBalans, con);
+    }
+
+    public void refundirajPlacanjeInternal(int korisnikId, double iznos, Connection con) throws SQLException {
+        Korisnik k = korisnikDao.findById(korisnikId, con);
+        if (k != null) {
+            double noviBalans = k.getNovac() + iznos;
+            korisnikDao.updateNovac(korisnikId, noviBalans, con);
+        }
+    }
+    
+    //Javna metoda ako želiš da skineš novac nezavisno (sama otvara konekciju)
+    public void procesuirajPlacanje(int korisnikId, double iznos) throws BusinessCenterException {
+        try (Connection con = ResourcesManager.getConnection()) {
+            procesuirajPlacanjeInternal(korisnikId, iznos, con);
+        } catch (SQLException ex) {
+            throw new BusinessCenterException("Greška prilikom obrade plaćanja", ex);
+        }
+    }
+    
 }

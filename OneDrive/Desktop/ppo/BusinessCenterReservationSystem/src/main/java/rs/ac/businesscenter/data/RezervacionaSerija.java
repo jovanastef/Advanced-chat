@@ -21,17 +21,21 @@ public class RezervacionaSerija implements Serializable {
     private Date datumPocetka;
     @JsonbDateFormat("yyyy-MM-dd'T'HH:mm:ss")
     private Date datumKraja;
+    private double ukupnaCena;
+    private String status; // AKTIVNA, OBRISANA
     
     public RezervacionaSerija() {
     }
 
-    public RezervacionaSerija(int id, Korisnik korisnik, Resurs resurs, String frekvencija, Date datumPocetka, Date datumKraja) {
+    public RezervacionaSerija(int id, Korisnik korisnik, Resurs resurs, String frekvencija, Date datumPocetka, Date datumKraja, double ukupnaCena, String status) {
         this.id = id;
         this.korisnik = korisnik;
         this.resurs = resurs;
         this.frekvencija = frekvencija;
         this.datumPocetka = datumPocetka;
         this.datumKraja = datumKraja;
+        this.ukupnaCena = ukupnaCena;
+        this.status = status;
     }
 
     public RezervacionaSerija(Korisnik korisnik, Resurs resurs, String frekvencija, Date datumPocetka, Date datumKraja) {
@@ -90,6 +94,23 @@ public class RezervacionaSerija implements Serializable {
         this.datumKraja = datumKraja;
     }
 
+    public double getUkupnaCena() {
+        return ukupnaCena;
+    }
+
+    public void setUkupnaCena(double ukupnaCena) {
+        this.ukupnaCena = ukupnaCena;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -100,6 +121,8 @@ public class RezervacionaSerija implements Serializable {
         sb.append(", frekvencija=").append(frekvencija);
         sb.append(", datumPocetka=").append(datumPocetka);
         sb.append(", datumKraja=").append(datumKraja);
+        sb.append(", ukupnaCena=").append(ukupnaCena);
+        sb.append(", status=").append(status);
         sb.append('}');
         return sb.toString();
     }

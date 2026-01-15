@@ -16,17 +16,21 @@ public class Korisnik implements Serializable {
     private String password;
     private String ime;
     private String email;
+    private double novac;
     
     public Korisnik() {
     }
 
-    public Korisnik(int id, String username, String password, String ime, String email) {
+    public Korisnik(int id, String username, String password, String ime, String email, double novac) {
         this.id = id;
         this.username = username;
         this.password = password;
         this.ime = ime;
         this.email = email;
+        this.novac = novac;
     }
+
+    
 
     public int getId() {
         return id;
@@ -68,9 +72,17 @@ public class Korisnik implements Serializable {
         this.email = email;
     }
 
+    public double getNovac() {
+        return novac;
+    }
+
+    public void setNovac(double novac) {
+        this.novac = novac;
+    }
+
     @Override
     public String toString() {
-        return "Korisnik{" + "id=" + id + ", username=" + username + ", password=" + password + ", ime=" + ime + ", email=" + email + '}';
+        return "Korisnik{" + "id=" + id + ", username=" + username + ", password=" + password + ", ime=" + ime + ", email=" + email + ", novac=" + novac + '}';
     }
     
     

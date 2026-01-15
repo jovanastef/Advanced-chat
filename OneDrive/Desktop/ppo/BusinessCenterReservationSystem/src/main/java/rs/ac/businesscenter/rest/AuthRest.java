@@ -5,11 +5,14 @@
 package rs.ac.businesscenter.rest;
 
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.SecurityContext;
 import rs.ac.businesscenter.data.JWTResponse;
 import rs.ac.businesscenter.data.LoginRequest;
 import rs.ac.businesscenter.data.Korisnik;
@@ -58,4 +61,30 @@ public class AuthRest {
                     .entity("Greška na serveru: " + e.getMessage()).build();
         }
     }
+    
+    @GET
+    @Path("/me")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getMe(@Context SecurityContext securityContext) {
+    try {
+        if (securityContext.getUserPrincipal() == null) {
+            return Response.status(Response.Status.UNAUTHORIZED)
+                           .entity("{\"error\": \"Niste ulogovani\"}").build();
+        }
+        
+        int id = Integer.parseInt(securityContext.getUserPrincipal().getName());
+        Korisnik k = korisnikService.findById(id); 
+        
+        if (k == null) {
+            return Response.status(Response.Status.NOT_FOUND)
+                           .entity("{\"error\": \"Korisnik nije pronađen\"}").build();
+        }
+        
+        return Response.ok(k).build();
+    } catch (Exception e) {
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                       .entity("{\"error\": \"" + e.getMessage() + "\"}").build();
+    }
+    }
 }
+ 

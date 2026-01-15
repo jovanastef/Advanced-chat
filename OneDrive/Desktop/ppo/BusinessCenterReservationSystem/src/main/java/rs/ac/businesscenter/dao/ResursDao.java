@@ -55,13 +55,14 @@ public class ResursDao {
     }
     
     public void insert(Resurs resurs, Connection con) throws SQLException {
-        String sql = "INSERT INTO resurs(naziv, tip, radno_vreme_pocetak, radno_vreme_kraj) VALUES(?,?,?,?)";
+        String sql = "INSERT INTO resurs(naziv, tip, radno_vreme_pocetak, radno_vreme_kraj, cena_po_terminu) VALUES(?,?,?,?,?)";
         
         try (PreparedStatement ps = con.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, resurs.getNaziv());
             ps.setString(2, resurs.getTip());
             ps.setTime(3, resurs.getRadnoVremePocetak());
             ps.setTime(4, resurs.getRadnoVremeKraj());
+            ps.setDouble(5, resurs.getCenaPoTerminu());
             ps.executeUpdate();
             
             try (ResultSet rs = ps.getGeneratedKeys()) {
@@ -81,7 +82,8 @@ public class ResursDao {
             rs.getString("naziv"),
             rs.getString("tip"),
             rs.getTime("radno_vreme_pocetak"),
-            rs.getTime("radno_vreme_kraj")
+            rs.getTime("radno_vreme_kraj"),
+            rs.getDouble("cena_po_terminu")
         );
     }
 }

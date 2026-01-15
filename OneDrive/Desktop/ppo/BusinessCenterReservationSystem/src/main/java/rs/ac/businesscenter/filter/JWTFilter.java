@@ -28,44 +28,46 @@ import java.util.logging.Level;
 @Priority(Priorities.AUTHENTICATION)
 public class JWTFilter implements ContainerRequestFilter {
     private static final Logger logger = Logger.getLogger(JWTFilter.class.getName());
-    
-    // Putanje su relativne u odnosu na @ApplicationPath("api")
-    private static final String AUTH_PATH = "auth";
-    private static final String RESOURCES_PATH = "resources";
 
     @Override
     public void filter(ContainerRequestContext requestContext) throws IOException {
+        // Dobavljamo relativnu putanju (npr. "auth/login", "auth/me", "resources/1")
         String path = requestContext.getUriInfo().getPath();
         
-        // 1. Propuštamo javne rute (login, registracija, pregled resursa)
-        if (path.startsWith(AUTH_PATH) || path.startsWith(RESOURCES_PATH)) {
+        //DEFINISANJE JAVNIH RUTA (Koje ne zahtevaju token)
+        // Koristimo .equals() za precizno poklapanje umesto .startsWith()
+        boolean isLogin = path.equals("auth/login");
+        boolean isRegister = path.equals("auth/register");
+        
+        // Resursi su obično javni za pregled (GET), ali ovde možeš dodati i proveru metode
+        boolean isPublicResource = path.startsWith("resources");
+
+        // Ako je zahtev upućen na javnu rutu, odmah prekidamo filter i puštamo zahtev dalje
+        if (isLogin || isRegister || isPublicResource) {
             return;
         }
-        
-        // 2. Provera Authorization headera
+
+        //PROVERA AUTHORIZATION HEADERA (Za sve ostale rute, npr. auth/me, reservations...)
         String authorizationHeader = requestContext.getHeaderString(HttpHeaders.AUTHORIZATION);
+        
         if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
             logger.log(Level.WARNING, "Pokušaj pristupa bez tokena na: {0}", path);
             requestContext.abortWith(
                 Response.status(Response.Status.UNAUTHORIZED)
-                .entity("Neophodan je validan JWT token (Bearer)")
+                .entity("{\"error\": \"Neophodan je validan JWT token (Bearer)\"}")
                 .build()
             );
             return;
         }
-        
+
         String token = authorizationHeader.substring("Bearer ".length()).trim();
-        
+
         try {
-            // 3. Validacija tokena
             JWTUtils.validateToken(token);
-            
-            // 4. Izvlačenje podataka
+
             final Integer korisnikId = JWTUtils.getKorisnikIdFromToken(token);
             final String username = JWTUtils.getUsernameFromToken(token);
-            
-            // 5. POSTAVLJANJE SECURITY CONTEXT-A (Ključno za REST kontrolere)
-            // Ovo omogućava da securityContext.getUserPrincipal().getName() vrati korisnikId
+
             requestContext.setSecurityContext(new SecurityContext() {
                 @Override
                 public Principal getUserPrincipal() {
@@ -74,7 +76,7 @@ public class JWTFilter implements ContainerRequestFilter {
 
                 @Override
                 public boolean isUserInRole(String role) {
-                    return true; // Ovde možeš dodati proveru rola ako ih uvedeš
+                    return true; 
                 }
 
                 @Override
@@ -88,22 +90,21 @@ public class JWTFilter implements ContainerRequestFilter {
                 }
             });
 
-            // Čuvamo i kao propertije za svaki slučaj
             requestContext.setProperty("korisnikId", korisnikId);
             requestContext.setProperty("username", username);
-            
+
         } catch (BusinessCenterException ex) {
             logger.log(Level.WARNING, "Nevalidan token za putanju {0}: {1}", new Object[]{path, ex.getMessage()});
             
-            Response.Status status = Response.Status.UNAUTHORIZED;
-            String message = "Token nije validan";
-            
+            String errorMessage = "Token nije validan";
             if ("TOKEN_EXPIRED".equals(ex.getErrorCode())) {
-                message = "Sesija je istekla, prijavite se ponovo.";
+                errorMessage = "Sesija je istekla, prijavite se ponovo.";
             }
-            
+
             requestContext.abortWith(
-                Response.status(status).entity(message).build()
+                Response.status(Response.Status.UNAUTHORIZED)
+                .entity("{\"error\": \"" + errorMessage + "\"}")
+                .build()
             );
         }
     }

@@ -33,6 +33,7 @@ public class RezervacijaService {
     private static final RezervacijaService instance = new RezervacijaService();
     private final RezervacijaDao rezervacijaDao = RezervacijaDao.getInstance();
     private final ResursService resursService = ResursService.getInstance();
+    private final KorisnikService korisnikService = KorisnikService.getInstance();
     
     private RezervacijaService() {}
     
@@ -55,6 +56,9 @@ public class RezervacijaService {
             try {
                 con.setAutoCommit(false);
                 
+                //NAPLATA: Skini novac pre nego što rezervišeš
+                korisnikService.procesuirajPlacanjeInternal(korisnik.getId(), resurs.getCenaPoTerminu(), con);
+                
                 // Provera da li se termin preklapa sa postojećim
                 if (!rezervacijaDao.isTerminSlobodan(resurs.getId(), pocetak, kraj, con)) {
                     throw new BusinessCenterException("Termin je već zauzet");
@@ -67,18 +71,23 @@ public class RezervacijaService {
                 rezervacija.setDatumKraja(kraj);
                 rezervacija.setStatus("AKTIVNA");
                 
+                rezervacija.setCenaTransakcije(resurs.getCenaPoTerminu());
+                
                 rezervacijaDao.insert(rezervacija, con);
                 con.commit();
                 
                 return rezervacija;
-            } catch (SQLException ex) {
-                con.rollback();
-                throw ex;
+            } catch (Exception ex) {
+                con.rollback(); // PONIŠTAVA SVE: Vraća pare ako insert ne uspe
+                if (ex instanceof BusinessCenterException) {
+                    throw (BusinessCenterException) ex;
+                }
+                throw new BusinessCenterException("Greška prilikom kreiranja rezervacije: " + ex.getMessage());
             }
-        } catch (SQLException ex) {
-            throw new BusinessCenterException("Greška prilikom kreiranja rezervacije", ex);
+            } catch (SQLException ex) {
+                throw new BusinessCenterException("Greška sa bazom podataka.");
+            }
         }
-    }
     
     public void cancelRezervacija(int rezervacijaId, int korisnikId) throws BusinessCenterException {
         try (Connection con = ResourcesManager.getConnection()) {
@@ -93,20 +102,25 @@ public class RezervacijaService {
                     throw new BusinessCenterException("Rezervacija je već otkazana");
                 }
                 
+                double iznosPovrata = rezervacija.getCenaTransakcije();
+                korisnikService.refundirajPlacanjeInternal(korisnikId, iznosPovrata, con);
+                
                 rezervacijaDao.cancel(rezervacijaId, con);
                 con.commit();
-            } catch (SQLException ex) {
+            } catch (Exception ex) {
                 con.rollback();
-                throw ex;
+                if (ex instanceof BusinessCenterException) {
+                    throw (BusinessCenterException) ex;
+                }
+                throw new BusinessCenterException("Greška prilikom otkazivanja: " + ex.getMessage());
             }
         } catch (SQLException ex) {
-            throw new BusinessCenterException("Greška prilikom otkazivanja rezervacije", ex);
+            throw new BusinessCenterException("Greška u komunikaciji sa bazom.");
         }
     }
 
-    /**
-     * Izračunava slobodne termine u okviru radnog vremena resursa za zadati datum.
-     */
+    //Izračunava slobodne termine u okviru radnog vremena resursa za zadati datum.
+    
     public List<SlobodanTermin> getSlobodniTermini(int resursId, Date datum) throws BusinessCenterException {
         try (Connection con = ResourcesManager.getConnection()) {
             Resurs resurs = resursService.findById(resursId);
@@ -208,38 +222,42 @@ public class RezervacijaService {
 }
     
     private Rezervacija getRezervacijaByIdInternal(int id, Connection con) throws SQLException, BusinessCenterException {
-        String sql = "SELECT r.*, k.username AS korisnik_username, k.ime AS korisnik_ime, " +
-                     "res.naziv AS resurs_naziv, res.tip AS resurs_tip, " +
-                     "s.id AS serija_id, s.frekvencija AS serija_frekvencija " +
-                     "FROM rezervacija r " +
-                     "JOIN korisnik k ON r.korisnik_id = k.id " +
-                     "JOIN resurs res ON r.resurs_id = res.id " +
-                     "LEFT JOIN rezervaciona_serija s ON r.serija_id = s.id " +
-                     "WHERE r.id = ?";
+        String sql = "SELECT r.*, k.username AS korisnik_username, k.ime AS korisnik_ime, "
+            + "res.naziv AS resurs_naziv, res.tip AS resurs_tip, res.cena_po_terminu AS resurs_cena, "
+            + "s.id AS serija_id, s.frekvencija AS serija_frekvencija "
+            + "FROM rezervacija r "
+            + "JOIN korisnik k ON r.korisnik_id = k.id "
+            + "JOIN resurs res ON r.resurs_id = res.id "
+            + "LEFT JOIN rezervaciona_serija s ON r.serija_id = s.id "
+            + "WHERE r.id = ?";
 
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, id);
             try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) throw new BusinessCenterException("Rezervacija sa ID " + id + " nije pronađena");
-                
+                if (!rs.next()) {
+                    throw new BusinessCenterException("Rezervacija sa ID " + id + " nije pronađena");
+                }
+
                 Rezervacija rezervacija = new Rezervacija();
                 rezervacija.setId(rs.getInt("id"));
                 rezervacija.setDatumPocetka(rs.getTimestamp("datum_pocetka"));
                 rezervacija.setDatumKraja(rs.getTimestamp("datum_kraja"));
                 rezervacija.setStatus(rs.getString("status"));
-                
+                rezervacija.setCenaTransakcije(rs.getDouble("cena_transakcije"));
+
                 Korisnik korisnik = new Korisnik();
                 korisnik.setId(rs.getInt("korisnik_id"));
                 korisnik.setUsername(rs.getString("korisnik_username"));
                 korisnik.setIme(rs.getString("korisnik_ime"));
                 rezervacija.setKorisnik(korisnik);
-                
+
                 Resurs resurs = new Resurs();
                 resurs.setId(rs.getInt("resurs_id"));
                 resurs.setNaziv(rs.getString("resurs_naziv"));
                 resurs.setTip(rs.getString("resurs_tip"));
+                resurs.setCenaPoTerminu(rs.getDouble("resurs_cena")); 
                 rezervacija.setResurs(resurs);
-                
+
                 if (rs.getObject("serija_id") != null) {
                     RezervacionaSerija serija = new RezervacionaSerija();
                     serija.setId(rs.getInt("serija_id"));

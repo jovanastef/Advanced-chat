@@ -30,11 +30,11 @@ public class RezervacijaDao {
     
     public List<Rezervacija> findActiveByKorisnikId(int korisnikId, Connection con) throws SQLException {
         List<Rezervacija> rezervacije = new ArrayList<>();
-        String sql = "SELECT r.*, res.naziv AS resurs_naziv, res.tip AS resurs_tip " +
-                     "FROM rezervacija r " +
-                     "JOIN resurs res ON r.resurs_id = res.id " +
-                     "WHERE r.korisnik_id = ? AND r.status = 'AKTIVNA' " +
-                     "ORDER BY r.datum_pocetka";
+        String sql = "SELECT r.*, res.naziv AS resurs_naziv, res.tip AS resurs_tip, res.cena_po_terminu AS resurs_cena " +
+                 "FROM rezervacija r " +
+                 "JOIN resurs res ON r.resurs_id = res.id " +
+                 "WHERE r.korisnik_id = ? AND r.status = 'AKTIVNA' " +
+                 "ORDER BY r.datum_pocetka";
         
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, korisnikId);
@@ -48,8 +48,8 @@ public class RezervacijaDao {
     }
     
     public void insert(Rezervacija rezervacija, Connection con) throws SQLException {
-        String sql = "INSERT INTO rezervacija(korisnik_id, resurs_id, datum_pocetka, datum_kraja, status, serija_id) " +
-                     "VALUES(?,?,?,?,?,?)";
+        String sql = "INSERT INTO rezervacija(korisnik_id, resurs_id, datum_pocetka, datum_kraja, status, cena_transakcije, serija_id) " +
+                     "VALUES(?,?,?,?,?,?,?)";
         
         try (PreparedStatement ps = con.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
             ps.setInt(1, rezervacija.getKorisnik().getId());
@@ -57,11 +57,12 @@ public class RezervacijaDao {
             ps.setTimestamp(3, new Timestamp(rezervacija.getDatumPocetka().getTime()));
             ps.setTimestamp(4, new Timestamp(rezervacija.getDatumKraja().getTime()));
             ps.setString(5, rezervacija.getStatus());
+            ps.setDouble(6, rezervacija.getCenaTransakcije());
             
             if (rezervacija.getSerija() != null) {
-                ps.setInt(6, rezervacija.getSerija().getId());
+                ps.setInt(7, rezervacija.getSerija().getId());
             } else {
-                ps.setNull(6, java.sql.Types.INTEGER);
+                ps.setNull(7, java.sql.Types.INTEGER);
             }
             
             ps.executeUpdate();
@@ -120,26 +121,27 @@ public class RezervacijaDao {
         return rezervacije;
     }
 
-    public boolean isTerminSlobodanZaUpdate(int resursId, Date pocetak, Date kraj, int rezervacijaId, Connection con) throws SQLException {
-    // Proveravamo da li postoji DRUGA aktivna rezervacija koja se preklapa sa novim terminom
-    String sql = "SELECT COUNT(*) AS broj FROM rezervacija " +
-                 "WHERE resurs_id = ? AND status = 'AKTIVNA' AND id != ? " +
-                 "AND datum_pocetka < ? AND datum_kraja > ?";
+    public boolean isTerminSlobodanZaUpdate(int resursId, Date pocetak, Date kraj, int trenutnaRezervacijaId, Connection con) throws SQLException {
+    String sql = "SELECT COUNT(*) FROM rezervacija WHERE resurs_id = ? AND status = 'AKTIVNA' " +
+                 "AND id != ? " + // IGNORIŠI TRENUTNU REZERVACIJU
+                 "AND ((datum_pocetka < ? AND datum_kraja > ?) OR (datum_pocetka < ? AND datum_kraja > ?))";
     
     try (PreparedStatement ps = con.prepareStatement(sql)) {
         ps.setInt(1, resursId);
-        ps.setInt(2, rezervacijaId);
+        ps.setInt(2, trenutnaRezervacijaId);
         ps.setTimestamp(3, new java.sql.Timestamp(kraj.getTime()));
         ps.setTimestamp(4, new java.sql.Timestamp(pocetak.getTime()));
+        ps.setTimestamp(5, new java.sql.Timestamp(kraj.getTime()));
+        ps.setTimestamp(6, new java.sql.Timestamp(pocetak.getTime()));
         
         try (ResultSet rs = ps.executeQuery()) {
             if (rs.next()) {
-                return rs.getInt("broj") == 0;
+                return rs.getInt(1) == 0;
             }
         }
     }
     return false;
-    }
+}
     
     public void update(Rezervacija rezervacija, Connection con) throws SQLException {
     // SQL upit koji menja vreme i status za tačno određeni ID
@@ -168,6 +170,7 @@ public class RezervacijaDao {
         resurs.setId(rs.getInt("resurs_id"));
         resurs.setNaziv(rs.getString("resurs_naziv"));
         resurs.setTip(rs.getString("resurs_tip"));
+        resurs.setCenaPoTerminu(rs.getDouble("resurs_cena"));
         rez.setResurs(resurs);
         
         return rez;
@@ -179,6 +182,7 @@ public class RezervacijaDao {
         rez.setDatumPocetka(rs.getTimestamp("datum_pocetka"));
         rez.setDatumKraja(rs.getTimestamp("datum_kraja"));
         rez.setStatus(rs.getString("status"));
+        rez.setCenaTransakcije(rs.getDouble("cena_transakcije"));
         return rez;
     }
 }

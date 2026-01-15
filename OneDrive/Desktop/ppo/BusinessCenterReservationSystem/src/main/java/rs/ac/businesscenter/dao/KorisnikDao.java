@@ -54,18 +54,20 @@ public class KorisnikDao {
     }
     
     public void insert(Korisnik korisnik, Connection con) throws SQLException {
-        String sql = "INSERT INTO korisnik(username, password, ime, email) VALUES(?,?,?,?)";
+        String sql = "INSERT INTO korisnik(username, password, ime, email, novac) VALUES(?,?,?,?,?)";
         
         try (PreparedStatement ps = con.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, korisnik.getUsername());
             ps.setString(2, korisnik.getPassword());
             ps.setString(3, korisnik.getIme());
             ps.setString(4, korisnik.getEmail());
+            ps.setDouble(5, 1000.0);
             ps.executeUpdate();
             
             try (ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) {
                     korisnik.setId(rs.getInt(1));
+                    korisnik.setNovac(1000.0);
                 }
             }
         }
@@ -113,7 +115,14 @@ public class KorisnikDao {
         }
         return false;
     }
-
+    public void updateNovac(int id, double noviIznos, Connection con) throws SQLException {
+        String query = "UPDATE korisnik SET novac = ? WHERE id = ?";
+        try (PreparedStatement ps = con.prepareStatement(query)) {
+            ps.setDouble(1, noviIznos);
+            ps.setInt(2, id);
+            ps.executeUpdate();
+        }
+    }
     /**
      * Pomoćna metoda za mapiranje ResultSet-a u objekat. 
      * Smanjuje dupliranje koda.
@@ -124,7 +133,8 @@ public class KorisnikDao {
             rs.getString("username"),
             rs.getString("password"),
             rs.getString("ime"),
-            rs.getString("email")
+            rs.getString("email"),
+            rs.getDouble("novac")
         );
     }
 }

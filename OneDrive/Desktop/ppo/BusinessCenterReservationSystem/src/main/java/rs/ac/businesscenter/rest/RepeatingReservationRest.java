@@ -31,7 +31,7 @@ public class RepeatingReservationRest {
     private static final List<String> ALLOWED_FREQUENCIES = Arrays.asList("DNEVNO", "RADNI_DANI", "NEDELJNO", "MESECNO");
 
     @POST
-    @Path("/series")
+    //@Path("/series")
     public Response createRepeatingReservation(RezervacijaRequest request, 
                                               @Context SecurityContext securityContext) {
         try {
@@ -58,7 +58,7 @@ public class RepeatingReservationRest {
             );
             
             return Response.status(Response.Status.CREATED)
-                          .entity("Ponavljajuća rezervacija uspešno kreirana")
+                          .entity("{\"message\": \"Serija uspešno kreirana i naplaćena\"}")
                           .build();
             
         } catch (BusinessCenterException e) {

@@ -25,8 +25,8 @@ public class RezervacionaSerijaDao {
     }
     
     public void insert(RezervacionaSerija serija, Connection con) throws SQLException {
-        String sql = "INSERT INTO rezervaciona_serija(korisnik_id, resurs_id, frekvencija, datum_pocetka, datum_kraja) " +
-                     "VALUES(?,?,?,?,?)";
+        String sql = "INSERT INTO rezervaciona_serija(korisnik_id, resurs_id, frekvencija, datum_pocetka, datum_kraja, ukupna_cena, status) " +
+                 "VALUES(?,?,?,?,?,?,?)";
         
         try (PreparedStatement ps = con.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
             ps.setInt(1, serija.getKorisnik().getId());
@@ -34,6 +34,8 @@ public class RezervacionaSerijaDao {
             ps.setString(3, serija.getFrekvencija());
             ps.setTimestamp(4, new Timestamp(serija.getDatumPocetka().getTime()));
             ps.setTimestamp(5, new Timestamp(serija.getDatumKraja().getTime()));
+            ps.setDouble(6, serija.getUkupnaCena());
+            ps.setString(7, serija.getStatus());
             
             ps.executeUpdate();
             
