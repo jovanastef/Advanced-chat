@@ -20,6 +20,8 @@ import fink.chat.messages.KryoUtil;
 import fink.chat.messages.ListRoomsRequest;
 import fink.chat.messages.ListRoomsResponse;
 import fink.chat.messages.ListUsers;
+import fink.chat.messages.LoadHistoryRequest;
+import fink.chat.messages.LoadHistoryResponse;
 import fink.chat.messages.Login;
 import fink.chat.messages.RoomInfo;
 import fink.chat.messages.StoredMessage;
@@ -40,6 +42,7 @@ public class ChatClient implements Runnable{
 	final String userName;
 	
 	private String currentRoomId = null;
+	private int currentHistoryPage = 0;
 	
 	public ChatClient(String hostName, int portNumber, String userName) {
 		this.client = new Client(DEFAULT_CLIENT_WRITE_BUFFER_SIZE, DEFAULT_CLIENT_READ_BUFFER_SIZE);
@@ -56,6 +59,8 @@ public class ChatClient implements Runnable{
 		client.getKryo().register(JoinRoomResponse.class);
 		client.getKryo().register(RoomInfo.class);
 		client.getKryo().register(StoredMessage[].class);
+		client.getKryo().register(LoadHistoryRequest.class);
+		client.getKryo().register(LoadHistoryResponse.class);
 		registerListener();
 	}
 	private void registerListener() {
@@ -132,6 +137,30 @@ public class ChatClient implements Runnable{
 				    }
 				    return;
 				}
+				
+				if (object instanceof LoadHistoryResponse) {
+				    LoadHistoryResponse res = (LoadHistoryResponse) object;
+				    if (res.success && res.messages != null) {
+				        if (res.messages.length == 0) {
+				            System.out.println("No more messages.");
+				            currentHistoryPage--; // vrati brojac
+				        } else {
+				            System.out.println("Historical messages:");
+				            for (StoredMessage msg : res.messages) {
+				                System.out.println("[" + msg.id + "] " + msg.author + ": " + msg.text +
+				                    (msg.edited ? " [Edited]" : ""));
+				            }
+				            if (res.nextPage == -1) {
+				                System.out.println("(End of history)");
+				                currentHistoryPage--; // ne moze dalje
+				            }
+				        }
+				    } else {
+				        System.out.println("Failed to load history: " + (res.message != null ? res.message : "unknown error"));
+				        currentHistoryPage--;
+				    }
+				    return;
+				}
 			}
 			
 			public void disconnected(Connection connection) {
@@ -190,6 +219,13 @@ public class ChatClient implements Runnable{
 	        } else if (userInput.startsWith("/join ")) {
 	            String roomId = userInput.substring(6).trim();
 	            client.sendTCP(new JoinRoomRequest(roomId, userName));
+	        } else if ("/history".equalsIgnoreCase(userInput)) {
+	            if (currentRoomId == null) {
+	                System.out.println("You are not in any room!");
+	            } else {
+	                client.sendTCP(new LoadHistoryRequest(currentRoomId, currentHistoryPage));
+	                currentHistoryPage++; // povecaj za sledeci poziv
+	            }
 	        } else {
 	            // Obicna poruka, saljemo u trenutnu sobu
 	            if (currentRoomId == null) {

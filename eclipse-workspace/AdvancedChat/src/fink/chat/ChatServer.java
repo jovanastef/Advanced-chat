@@ -22,6 +22,8 @@ import fink.chat.messages.ListRoomsResponse;
 import fink.chat.messages.JoinRoomRequest;
 import fink.chat.messages.JoinRoomResponse;
 import fink.chat.messages.RoomInfo;
+import fink.chat.messages.LoadHistoryRequest;
+import fink.chat.messages.LoadHistoryResponse;
 
 
 public class ChatServer implements Runnable{
@@ -54,6 +56,8 @@ public class ChatServer implements Runnable{
 		server.getKryo().register(JoinRoomResponse.class);
 		server.getKryo().register(RoomInfo.class);
 		server.getKryo().register(StoredMessage[].class);
+		server.getKryo().register(LoadHistoryRequest.class);
+		server.getKryo().register(LoadHistoryResponse.class);
 		registerListener();
 	}
 	private void registerListener() {
@@ -191,6 +195,48 @@ public class ChatServer implements Runnable{
 				    res.success = true;
 				    connection.sendTCP(res);
 				    System.out.println(req.userName + " joined room " + room.name);
+				    return;
+				}
+				
+				if (object instanceof LoadHistoryRequest) {
+				    LoadHistoryRequest req = (LoadHistoryRequest) object;
+				    LoadHistoryResponse res = new LoadHistoryResponse();
+
+				    if (req.roomId == null || req.page < 0) {
+				        res.success = false;
+				        res.message = "Invalid request";
+				        connection.sendTCP(res);
+				        return;
+				    }
+
+				    List<StoredMessage> allMsgs = roomMessages.get(req.roomId);
+				    if (allMsgs == null || allMsgs.isEmpty()) {
+				        res.messages = new StoredMessage[0];
+				        res.nextPage = -1;
+				        res.success = true;
+				        connection.sendTCP(res);
+				        return;
+				    }
+
+				    // Sortiramo po timestampu opadajuce (najnovije prvo)
+				    List<StoredMessage> sorted = new ArrayList<>(allMsgs);
+				    sorted.sort((a, b) -> Long.compare(b.timestamp, a.timestamp));
+
+				    int total = sorted.size();
+				    int fromIndex = req.page * 10;
+				    int toIndex = Math.min(fromIndex + 10, total);
+
+				    if (fromIndex >= total) {
+				        res.messages = new StoredMessage[0];
+				        res.nextPage = -1;
+				    } else {
+				        List<StoredMessage> pageMessages = sorted.subList(fromIndex, toIndex);
+				        res.messages = pageMessages.toArray(new StoredMessage[0]);
+				        res.nextPage = (toIndex < total) ? req.page + 1 : -1;
+				    }
+
+				    res.success = true;
+				    connection.sendTCP(res);
 				    return;
 				}
 			}
