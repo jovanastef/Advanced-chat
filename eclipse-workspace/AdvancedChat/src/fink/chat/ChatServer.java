@@ -13,10 +13,12 @@ import fink.chat.messages.InfoMessage;
 import fink.chat.messages.KryoUtil;
 import fink.chat.messages.ListUsers;
 import fink.chat.messages.Login;
+import fink.chat.messages.PrivateMessage;
 import fink.chat.messages.WhoRequest;
 import fink.chat.messages.StoredMessage;
 import fink.chat.messages.CreateRoomRequest;
 import fink.chat.messages.CreateRoomResponse;
+import fink.chat.messages.GroupMessage;
 import fink.chat.messages.ListRoomsRequest;
 import fink.chat.messages.ListRoomsResponse;
 import fink.chat.messages.JoinRoomRequest;
@@ -58,6 +60,8 @@ public class ChatServer implements Runnable{
 		server.getKryo().register(StoredMessage[].class);
 		server.getKryo().register(LoadHistoryRequest.class);
 		server.getKryo().register(LoadHistoryResponse.class);
+		server.getKryo().register(PrivateMessage.class);
+		server.getKryo().register(GroupMessage.class);
 		registerListener();
 	}
 	private void registerListener() {
@@ -237,6 +241,45 @@ public class ChatServer implements Runnable{
 
 				    res.success = true;
 				    connection.sendTCP(res);
+				    return;
+				}
+				
+				if (object instanceof PrivateMessage) {
+				    PrivateMessage pm = (PrivateMessage) object;
+
+				    // Sacuvaj poruku (opciono)
+				    StoredMessage stored = new StoredMessage(pm.id, pm.fromUser, pm.text, null);
+				    stored.replyToId = null;
+				    allMessages.add(stored);
+
+				    // Prosledi primaocu
+				    Connection toConn = userConnectionMap.get(pm.toUser);
+				    if (toConn != null && toConn.isConnected()) {
+				        toConn.sendTCP(pm);
+				        System.out.println("PM from " + pm.fromUser + " to " + pm.toUser);
+				    } else {
+				        // Opciono: posalji gresku posiljaocu
+				        InfoMessage error = new InfoMessage("User " + pm.toUser + " is not online.");
+				        connection.sendTCP(error);
+				    }
+				    return;
+				}
+				
+				if (object instanceof GroupMessage) {
+				    GroupMessage gm = (GroupMessage) object;
+
+				    // Sacuvaj poruku (opciono)
+				    StoredMessage stored = new StoredMessage(gm.id, gm.fromUser, gm.text, null);
+				    allMessages.add(stored);
+
+				    // Prosledi svim online primaocima
+				    for (String recipient : gm.recipients) {
+				        Connection conn = userConnectionMap.get(recipient);
+				        if (conn != null && conn.isConnected()) {
+				            conn.sendTCP(gm);
+				        }
+				    }
+				    System.out.println("Group message from " + gm.fromUser + " to " + String.join(",", gm.recipients));
 				    return;
 				}
 			}

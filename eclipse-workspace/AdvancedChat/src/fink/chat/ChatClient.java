@@ -13,6 +13,7 @@ import com.esotericsoftware.kryonet.Listener;
 import fink.chat.messages.ChatMessage;
 import fink.chat.messages.CreateRoomRequest;
 import fink.chat.messages.CreateRoomResponse;
+import fink.chat.messages.GroupMessage;
 import fink.chat.messages.InfoMessage;
 import fink.chat.messages.JoinRoomRequest;
 import fink.chat.messages.JoinRoomResponse;
@@ -23,6 +24,7 @@ import fink.chat.messages.ListUsers;
 import fink.chat.messages.LoadHistoryRequest;
 import fink.chat.messages.LoadHistoryResponse;
 import fink.chat.messages.Login;
+import fink.chat.messages.PrivateMessage;
 import fink.chat.messages.RoomInfo;
 import fink.chat.messages.StoredMessage;
 import fink.chat.messages.WhoRequest;
@@ -61,6 +63,8 @@ public class ChatClient implements Runnable{
 		client.getKryo().register(StoredMessage[].class);
 		client.getKryo().register(LoadHistoryRequest.class);
 		client.getKryo().register(LoadHistoryResponse.class);
+		client.getKryo().register(PrivateMessage.class);
+		client.getKryo().register(GroupMessage.class);
 		registerListener();
 	}
 	private void registerListener() {
@@ -161,6 +165,18 @@ public class ChatClient implements Runnable{
 				    }
 				    return;
 				}
+				
+				if (object instanceof PrivateMessage) {
+				    PrivateMessage pm = (PrivateMessage) object;
+				    System.out.println("[PM from " + pm.fromUser + "] " + pm.text);
+				    return;
+				}
+
+				if (object instanceof GroupMessage) {
+				    GroupMessage gm = (GroupMessage) object;
+				    System.out.println("[Group from " + gm.fromUser + "] " + gm.text);
+				    return;
+				}
 			}
 			
 			public void disconnected(Connection connection) {
@@ -226,6 +242,30 @@ public class ChatClient implements Runnable{
 	                client.sendTCP(new LoadHistoryRequest(currentRoomId, currentHistoryPage));
 	                currentHistoryPage++; // povecaj za sledeci poziv
 	            }
+	        } else if (userInput.startsWith("/pm ")) {
+	            String[] parts = userInput.substring(4).trim().split(" ", 2);
+	            if (parts.length < 2) {
+	                System.out.println("Usage: /pm <username> <message>");
+	            } else {
+	                String toUser = parts[0];
+	                String text = parts[1];
+	                client.sendTCP(new PrivateMessage(userName, toUser, text));
+	            }
+	        } else if (userInput.startsWith("/group ")) {
+	            String rest = userInput.substring(7).trim();
+	            int spaceIndex = rest.indexOf(' ');
+	            if (spaceIndex == -1) {
+	                System.out.println("Usage: /group <user1,user2,...> <message>");
+	            } else {
+	                String userList = rest.substring(0, spaceIndex);
+	                String text = rest.substring(spaceIndex + 1);
+	                String[] recipients = userList.split(",");
+	                for (int i = 0; i < recipients.length; i++) {
+	                    recipients[i] = recipients[i].trim();
+	                }
+	                client.sendTCP(new GroupMessage(userName, recipients, text));
+	            }
+	            
 	        } else {
 	            // Obicna poruka, saljemo u trenutnu sobu
 	            if (currentRoomId == null) {
