@@ -13,6 +13,8 @@ import com.esotericsoftware.kryonet.Listener;
 import fink.chat.messages.ChatMessage;
 import fink.chat.messages.CreateRoomRequest;
 import fink.chat.messages.CreateRoomResponse;
+import fink.chat.messages.EditMessage;
+import fink.chat.messages.EditRequest;
 import fink.chat.messages.GroupMessage;
 import fink.chat.messages.InfoMessage;
 import fink.chat.messages.JoinRoomRequest;
@@ -65,6 +67,8 @@ public class ChatClient implements Runnable{
 		client.getKryo().register(LoadHistoryResponse.class);
 		client.getKryo().register(PrivateMessage.class);
 		client.getKryo().register(GroupMessage.class);
+		client.getKryo().register(EditRequest.class);
+		client.getKryo().register(EditMessage.class);
 		registerListener();
 	}
 	private void registerListener() {
@@ -95,7 +99,12 @@ public class ChatClient implements Runnable{
 				
 				if (object instanceof ChatMessage) {
 					ChatMessage message = (ChatMessage)object;
-					showMessage(message.getUser()+"r:"+message.getTxt());
+					// Ako je reply, pokusaj da nadjes originalnu poruku (opciono)
+				    if (message.replyToId != null) {
+				        System.out.println("[" + message.id + "] " + message.user + " replied to " + message.replyToId + ": " + message.txt);
+				    } else {
+				        System.out.println("[" + message.id + "] " + message.user + ": " + message.txt);
+				    }
 					return;
 				}
 				
@@ -175,6 +184,14 @@ public class ChatClient implements Runnable{
 				if (object instanceof GroupMessage) {
 				    GroupMessage gm = (GroupMessage) object;
 				    System.out.println("[Group from " + gm.fromUser + "] " + gm.text);
+				    return;
+				}
+				
+				if (object instanceof EditMessage) {
+				    EditMessage em = (EditMessage) object;
+				    // Ovde bi u GUI aplikaciji azurirao poruku po ID-u
+				    // U konzoli, mozemo samo ispisati:
+				    System.out.println("[EDIT] Message " + em.msgId + " updated to: " + em.newText);
 				    return;
 				}
 			}
@@ -264,6 +281,37 @@ public class ChatClient implements Runnable{
 	                    recipients[i] = recipients[i].trim();
 	                }
 	                client.sendTCP(new GroupMessage(userName, recipients, text));
+	            }
+	        } else if (userInput.startsWith("/reply ")) {
+	            String rest = userInput.substring(7).trim();
+	            int spaceIndex = rest.indexOf(' ');
+	            if (spaceIndex == -1) {
+	                System.out.println("Usage: /reply <msgId> <text>");
+	            } else {
+	                String msgId = rest.substring(0, spaceIndex);
+	                String text = rest.substring(spaceIndex + 1);
+	                if (currentRoomId == null) {
+	                    System.out.println("You must be in a room to reply!");
+	                } else {
+	                    ChatMessage replyMsg = new ChatMessage(userName, text);
+	                    replyMsg.roomId = currentRoomId;
+	                    replyMsg.replyToId = msgId;
+	                    client.sendTCP(replyMsg);
+	                }
+	            }
+	        } else if (userInput.startsWith("/edit ")) {
+	            String rest = userInput.substring(6).trim();
+	            int spaceIndex = rest.indexOf(' ');
+	            if (spaceIndex == -1) {
+	                System.out.println("Usage: /edit <msgId> <new text>");
+	            } else {
+	                String msgId = rest.substring(0, spaceIndex);
+	                String newText = rest.substring(spaceIndex + 1);
+	                if (currentRoomId == null) {
+	                    System.out.println("You must be in a room to edit!");
+	                } else {
+	                    client.sendTCP(new EditRequest(msgId, newText, currentRoomId, userName));
+	                }
 	            }
 	            
 	        } else {

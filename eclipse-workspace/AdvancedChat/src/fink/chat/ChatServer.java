@@ -18,6 +18,8 @@ import fink.chat.messages.WhoRequest;
 import fink.chat.messages.StoredMessage;
 import fink.chat.messages.CreateRoomRequest;
 import fink.chat.messages.CreateRoomResponse;
+import fink.chat.messages.EditMessage;
+import fink.chat.messages.EditRequest;
 import fink.chat.messages.GroupMessage;
 import fink.chat.messages.ListRoomsRequest;
 import fink.chat.messages.ListRoomsResponse;
@@ -62,6 +64,8 @@ public class ChatServer implements Runnable{
 		server.getKryo().register(LoadHistoryResponse.class);
 		server.getKryo().register(PrivateMessage.class);
 		server.getKryo().register(GroupMessage.class);
+		server.getKryo().register(EditRequest.class);
+		server.getKryo().register(EditMessage.class);
 		registerListener();
 	}
 	private void registerListener() {
@@ -280,6 +284,56 @@ public class ChatServer implements Runnable{
 				        }
 				    }
 				    System.out.println("Group message from " + gm.fromUser + " to " + String.join(",", gm.recipients));
+				    return;
+				}
+				
+				if (object instanceof EditRequest) {
+				    EditRequest req = (EditRequest) object;
+				    EditMessage response = null;
+
+				    // Pronadji poruku u globalnoj listi
+				    StoredMessage target = null;
+				    for (StoredMessage msg : allMessages) {
+				        if (msg.id.equals(req.msgId)) {
+				            target = msg;
+				            break;
+				        }
+				    }
+
+				    if (target == null) {
+				        connection.sendTCP(new InfoMessage("Message not found."));
+				        return;
+				    }
+
+				    // Proveri da li je autor isti kao editor
+				    if (!target.author.equals(req.editor)) {
+				        connection.sendTCP(new InfoMessage("You can only edit your own messages."));
+				        return;
+				    }
+
+				    // Azuriraj poruku
+				    target.text = req.newText;
+				    target.edited = true;
+
+				    // Posalji obavestenje svim clanovima sobe
+				    if (req.roomId != null) {
+				        Set<String> usersInRoom = new HashSet<>();
+				        for (Map.Entry<String, Set<String>> entry : userRooms.entrySet()) {
+				            if (entry.getValue().contains(req.roomId)) {
+				                usersInRoom.add(entry.getKey());
+				            }
+				        }
+
+				        response = new EditMessage(req.msgId, req.newText, req.roomId);
+				        for (String user : usersInRoom) {
+				            Connection conn = userConnectionMap.get(user);
+				            if (conn != null && conn.isConnected()) {
+				                conn.sendTCP(response);
+				            }
+				        }
+				    }
+
+				    System.out.println("Message " + req.msgId + " edited by " + req.editor);
 				    return;
 				}
 			}
