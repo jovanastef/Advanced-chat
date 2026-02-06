@@ -80,26 +80,52 @@ public class ChatServer implements Runnable{
 				        chatMsg.id = java.util.UUID.randomUUID().toString();
 				    }
 
-				    // Ako nema roomId, dodeli default sobu (kasnije cu omoguciti vise soba)
+				    // Proveri da li je roomId postavljen
 				    if (chatMsg.roomId == null || chatMsg.roomId.isEmpty()) {
-				        chatMsg.roomId = "default";
+				        // Odbaci poruku ako nema sobe
+				        System.err.println("Dropped message without roomId from " + chatMsg.user);
+				        return;
 				    }
 
-				    // Sacuvaj poruku na serveru
-				    StoredMessage stored = new StoredMessage(
+				    // Sacuvaj poruku u globalnoj listi (opciono)
+				    StoredMessage storedGlobal = new StoredMessage(
 				        chatMsg.id,
 				        chatMsg.user,
 				        chatMsg.txt,
 				        chatMsg.roomId
 				    );
-				    stored.replyToId = chatMsg.replyToId; // moze biti null
-				    allMessages.add(stored);
+				    storedGlobal.replyToId = chatMsg.replyToId;
+				    allMessages.add(storedGlobal);
 
-				    // Debug ispis
-				    System.out.println("Saved message ID: " + chatMsg.id + " | Room: " + chatMsg.roomId);
+				    // Sacuvaj poruku u istoriji sobe
+				    List<StoredMessage> roomMsgList = roomMessages.get(chatMsg.roomId);
+				    if (roomMsgList != null) {
+				        StoredMessage storedForRoom = new StoredMessage(
+				            chatMsg.id,
+				            chatMsg.user,
+				            chatMsg.txt,
+				            chatMsg.roomId
+				        );
+				        storedForRoom.replyToId = chatMsg.replyToId;
+				        roomMsgList.add(storedForRoom);
+				    }
 
-				    // Prosledi ostalima
-				    broadcastChatMessage(chatMsg, connection);
+				    // Prosledi poruku SAMO korisnicima u toj sobi
+				    Set<String> usersInRoom = new HashSet<>();
+				    for (Map.Entry<String, Set<String>> entry : userRooms.entrySet()) {
+				        if (entry.getValue().contains(chatMsg.roomId)) {
+				            usersInRoom.add(entry.getKey());
+				        }
+				    }
+
+				    for (String user : usersInRoom) {
+				        Connection conn = userConnectionMap.get(user);
+				        if (conn != null && conn.isConnected() && conn != connection) {
+				            conn.sendTCP(chatMsg);
+				        }
+				    }
+
+				    System.out.println("Message sent to room " + chatMsg.roomId + " from " + chatMsg.user);
 				    return;
 				}
 

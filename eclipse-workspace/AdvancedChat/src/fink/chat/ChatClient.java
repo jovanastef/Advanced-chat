@@ -4,6 +4,7 @@ package fink.chat;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.Scanner;
 
 import com.esotericsoftware.kryonet.Client;
 import com.esotericsoftware.kryonet.Connection;
@@ -38,6 +39,7 @@ public class ChatClient implements Runnable{
 	final int portNumber;
 	final String userName;
 	
+	private String currentRoomId = null;
 	
 	public ChatClient(String hostName, int portNumber, String userName) {
 		this.client = new Client(DEFAULT_CLIENT_WRITE_BUFFER_SIZE, DEFAULT_CLIENT_READ_BUFFER_SIZE);
@@ -114,7 +116,9 @@ public class ChatClient implements Runnable{
 				if (object instanceof JoinRoomResponse) {
 				    JoinRoomResponse res = (JoinRoomResponse) object;
 				    if (res.success) {
-				        System.out.println("Joined room. Last 10 messages:");
+				    	currentRoomId = res.roomId;
+				    	System.out.println("Joined room: " + res.roomId);
+				        System.out.println("Last 10 messages:");
 				        if (res.last10Messages != null && res.last10Messages.length > 0) {
 				            for (StoredMessage msg : res.last10Messages) {
 				                System.out.println("[" + msg.id + "] " + msg.author + ": " + msg.text +
@@ -169,50 +173,36 @@ public class ChatClient implements Runnable{
 	public void connect() throws IOException {
 		client.connect(1000, hostName, portNumber);
 	}
+
 	public void run() {
-		
-		try (
-				BufferedReader stdIn = new BufferedReader(
-	                    new InputStreamReader(System.in))	// Za čitanje sa standardnog ulaza - tastature!
-	        ) {
-					            
-				String userInput;
-				running = true;
-				
-	            while (running) {
-	            	userInput = stdIn.readLine();
-	            	if (userInput == null || "BYE".equalsIgnoreCase(userInput)) {
-	            	    running = false;
-	            	} else if ("WHO".equalsIgnoreCase(userInput)) {
-	            	    client.sendTCP(new WhoRequest());
-	            	} else if (userInput.startsWith("/create ")) {
-	            	    String roomName = userInput.substring(8).trim();
-	            	    client.sendTCP(new CreateRoomRequest(roomName, userName));
-	            	} else if ("/listrooms".equalsIgnoreCase(userInput)) {
-	            	    client.sendTCP(new ListRoomsRequest());
-	            	} else if (userInput.startsWith("/join ")) {
-	            	    String roomId = userInput.substring(6).trim();
-	            	    client.sendTCP(new JoinRoomRequest(roomId, userName));
-	            	} else {
-	            	    // Obicna poruka – saljemo u trenutnu sobu (kasnije cemo pratiti aktivnu sobu)
-	            	    ChatMessage message = new ChatMessage(userName, userInput);
-	            	    // Za sada saljemo bez roomId
-	            	    client.sendTCP(message);
-	            	}
-	            	
-	            	if (!client.isConnected() && running)
-	            		connect();
-	            	
-	           }
-	            
-	    } catch (IOException e) {
-			e.printStackTrace();
-		}
-		finally {
-			running = false;
-			System.out.println("CLIENT SE DISCONNECTUJE");
-			client.close();;
-		}
+	    Scanner scanner = new Scanner(System.in);
+	    while (running) {
+	        String userInput = scanner.nextLine();
+	        if (userInput == null || "BYE".equalsIgnoreCase(userInput)) {
+	            running = false;
+	        } else if ("WHO".equalsIgnoreCase(userInput)) {
+	            client.sendTCP(new WhoRequest());
+	        } else if (userInput.startsWith("/create ")) {
+	            String roomName = userInput.substring(8).trim();
+	            client.sendTCP(new CreateRoomRequest(roomName, userName));
+	        } else if ("/listrooms".equalsIgnoreCase(userInput)) {
+	            client.sendTCP(new ListRoomsRequest());
+	        } else if (userInput.startsWith("/join ")) {
+	            String roomId = userInput.substring(6).trim();
+	            client.sendTCP(new JoinRoomRequest(roomId, userName));
+	        } else {
+	            // Obicna poruka, saljemo u trenutnu sobu
+	            if (currentRoomId == null) {
+	                System.out.println("You are not in any room! Use /join <roomId>");
+	            } else {
+	                ChatMessage message = new ChatMessage(userName, userInput);
+	                message.roomId = currentRoomId;
+	                client.sendTCP(message);
+	            }
+	        }
+	    }
+	    scanner.close();
+	    client.stop();
 	}
 	public static void main(String[] args) {
 		if (args.length != 3) {
