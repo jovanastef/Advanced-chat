@@ -1,6 +1,8 @@
 package fink.chat;
 
 import java.io.IOException;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -14,6 +16,7 @@ import fink.chat.messages.KryoUtil;
 import fink.chat.messages.ListUsers;
 import fink.chat.messages.Login;
 import fink.chat.messages.WhoRequest;
+import fink.chat.messages.StoredMessage;
 
 
 public class ChatServer implements Runnable{
@@ -25,6 +28,7 @@ public class ChatServer implements Runnable{
 	final int portNumber;
 	ConcurrentMap<String, Connection> userConnectionMap = new ConcurrentHashMap<String, Connection>();
 	ConcurrentMap<Connection, String> connectionUserMap = new ConcurrentHashMap<Connection, String>();
+	private final List<StoredMessage> allMessages = new CopyOnWriteArrayList<>();
 	
 	public ChatServer(int portNumber) {
 		this.server = new Server();
@@ -50,10 +54,34 @@ public class ChatServer implements Runnable{
 				}
 				
 				if (object instanceof ChatMessage) {
-					ChatMessage chatMessage = (ChatMessage)object;
-					System.out.println(chatMessage.getUser()+":"+chatMessage.getTxt());
-					broadcastChatMessage(chatMessage, connection); 
-					return;
+				    ChatMessage chatMsg = (ChatMessage) object;
+
+				    // Generisi ID ako nije postavljen
+				    if (chatMsg.id == null || chatMsg.id.isEmpty()) {
+				        chatMsg.id = java.util.UUID.randomUUID().toString();
+				    }
+
+				    // Ako nema roomId, dodeli default sobu (kasnije cu omoguciti vise soba)
+				    if (chatMsg.roomId == null || chatMsg.roomId.isEmpty()) {
+				        chatMsg.roomId = "default";
+				    }
+
+				    // Sacuvaj poruku na serveru
+				    StoredMessage stored = new StoredMessage(
+				        chatMsg.id,
+				        chatMsg.user,
+				        chatMsg.txt,
+				        chatMsg.roomId
+				    );
+				    stored.replyToId = chatMsg.replyToId; // moze biti null
+				    allMessages.add(stored);
+
+				    // Debug ispis
+				    System.out.println("Saved message ID: " + chatMsg.id + " | Room: " + chatMsg.roomId);
+
+				    // Prosledi ostalima
+				    broadcastChatMessage(chatMsg, connection);
+				    return;
 				}
 
 				if (object instanceof WhoRequest) {
