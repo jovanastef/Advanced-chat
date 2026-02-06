@@ -1,10 +1,8 @@
 package fink.chat;
 
 import java.io.IOException;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.*;
+import java.util.concurrent.*;
 
 import com.esotericsoftware.kryonet.Connection;
 import com.esotericsoftware.kryonet.Listener;
@@ -17,6 +15,13 @@ import fink.chat.messages.ListUsers;
 import fink.chat.messages.Login;
 import fink.chat.messages.WhoRequest;
 import fink.chat.messages.StoredMessage;
+import fink.chat.messages.CreateRoomRequest;
+import fink.chat.messages.CreateRoomResponse;
+import fink.chat.messages.ListRoomsRequest;
+import fink.chat.messages.ListRoomsResponse;
+import fink.chat.messages.JoinRoomRequest;
+import fink.chat.messages.JoinRoomResponse;
+import fink.chat.messages.RoomInfo;
 
 
 public class ChatServer implements Runnable{
@@ -29,12 +34,26 @@ public class ChatServer implements Runnable{
 	ConcurrentMap<String, Connection> userConnectionMap = new ConcurrentHashMap<String, Connection>();
 	ConcurrentMap<Connection, String> connectionUserMap = new ConcurrentHashMap<Connection, String>();
 	private final List<StoredMessage> allMessages = new CopyOnWriteArrayList<>();
+	// Mapa svih soba: roomId -> RoomInfo
+	private final Map<String, RoomInfo> rooms = new ConcurrentHashMap<>();
+	// Ko je u kojoj sobi: userName -> Set<roomId>
+	private final Map<String, Set<String>> userRooms = new ConcurrentHashMap<>();
+	// Poruke po sobama: roomId -> List<StoredMessage>
+	private final Map<String, List<StoredMessage>> roomMessages = new ConcurrentHashMap<>();
 	
 	public ChatServer(int portNumber) {
 		this.server = new Server();
 		
 		this.portNumber = portNumber;
 		KryoUtil.registerKryoClasses(server.getKryo());
+		server.getKryo().register(CreateRoomRequest.class);
+		server.getKryo().register(CreateRoomResponse.class);
+		server.getKryo().register(ListRoomsRequest.class);
+		server.getKryo().register(ListRoomsResponse.class);
+		server.getKryo().register(JoinRoomRequest.class);
+		server.getKryo().register(JoinRoomResponse.class);
+		server.getKryo().register(RoomInfo.class);
+		server.getKryo().register(StoredMessage[].class);
 		registerListener();
 	}
 	private void registerListener() {
@@ -88,6 +107,65 @@ public class ChatServer implements Runnable{
 					ListUsers listUsers = new ListUsers(getAllUsers());
 					connection.sendTCP(listUsers);
 					return;
+				}
+				
+				if (object instanceof CreateRoomRequest) {
+				    CreateRoomRequest req = (CreateRoomRequest) object;
+				    CreateRoomResponse res = new CreateRoomResponse();
+
+				    if (req.roomName == null || req.roomName.trim().isEmpty()) {
+				        res.success = false;
+				        res.message = "Room name cannot be empty";
+				        connection.sendTCP(res);
+				        return;
+				    }
+
+				    String roomId = java.util.UUID.randomUUID().toString();
+				    RoomInfo room = new RoomInfo(roomId, req.roomName.trim(), req.creator);
+				    rooms.put(roomId, room);
+				    roomMessages.put(roomId, new CopyOnWriteArrayList<>());
+
+				    res.success = true;
+				    res.roomId = roomId;
+				    res.roomName = room.name;
+				    connection.sendTCP(res);
+				    System.out.println("Created room: " + room.name + " (" + roomId + ") by " + req.creator);
+				    return;
+				}
+
+				if (object instanceof ListRoomsRequest) {
+				    ListRoomsResponse res = new ListRoomsResponse();
+				    res.rooms = rooms.values().toArray(new RoomInfo[0]);
+				    connection.sendTCP(res);
+				    return;
+				}
+
+				if (object instanceof JoinRoomRequest) {
+				    JoinRoomRequest req = (JoinRoomRequest) object;
+				    JoinRoomResponse res = new JoinRoomResponse();
+
+				    RoomInfo room = rooms.get(req.roomId);
+				    if (room == null) {
+				        res.success = false;
+				        res.message = "Room not found";
+				        connection.sendTCP(res);
+				        return;
+				    }
+
+				    // Zapamti da je korisnik u ovoj sobi
+				    userRooms.computeIfAbsent(req.userName, k -> new ConcurrentSkipListSet<>()).add(req.roomId);
+
+				    // Uzmi poslednjih 10 poruka iz sobe (obrnuto sortirano po vremenu)
+				    List<StoredMessage> messages = roomMessages.get(req.roomId);
+				    if (messages == null) messages = new ArrayList<>();
+
+				    int fromIndex = Math.max(0, messages.size() - 10);
+				    List<StoredMessage> last10 = new ArrayList<>(messages.subList(fromIndex, messages.size()));
+				    res.last10Messages = last10.toArray(new StoredMessage[0]);
+				    res.success = true;
+				    connection.sendTCP(res);
+				    System.out.println(req.userName + " joined room " + room.name);
+				    return;
 				}
 			}
 			

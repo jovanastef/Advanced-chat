@@ -10,10 +10,18 @@ import com.esotericsoftware.kryonet.Connection;
 import com.esotericsoftware.kryonet.Listener;
 
 import fink.chat.messages.ChatMessage;
+import fink.chat.messages.CreateRoomRequest;
+import fink.chat.messages.CreateRoomResponse;
 import fink.chat.messages.InfoMessage;
+import fink.chat.messages.JoinRoomRequest;
+import fink.chat.messages.JoinRoomResponse;
 import fink.chat.messages.KryoUtil;
+import fink.chat.messages.ListRoomsRequest;
+import fink.chat.messages.ListRoomsResponse;
 import fink.chat.messages.ListUsers;
 import fink.chat.messages.Login;
+import fink.chat.messages.RoomInfo;
+import fink.chat.messages.StoredMessage;
 import fink.chat.messages.WhoRequest;
 
 public class ChatClient implements Runnable{
@@ -38,6 +46,14 @@ public class ChatClient implements Runnable{
 		this.portNumber = portNumber;
 		this.userName = userName;
 		KryoUtil.registerKryoClasses(client.getKryo());
+		client.getKryo().register(CreateRoomRequest.class);
+		client.getKryo().register(CreateRoomResponse.class);
+		client.getKryo().register(ListRoomsRequest.class);
+		client.getKryo().register(ListRoomsResponse.class);
+		client.getKryo().register(JoinRoomRequest.class);
+		client.getKryo().register(JoinRoomResponse.class);
+		client.getKryo().register(RoomInfo.class);
+		client.getKryo().register(StoredMessage[].class);
 		registerListener();
 	}
 	private void registerListener() {
@@ -70,6 +86,47 @@ public class ChatClient implements Runnable{
 					ChatMessage message = (ChatMessage)object;
 					showMessage(message.getUser()+"r:"+message.getTxt());
 					return;
+				}
+				
+				if (object instanceof CreateRoomResponse) {
+				    CreateRoomResponse res = (CreateRoomResponse) object;
+				    if (res.success) {
+				        System.out.println("Created room: " + res.roomName + " (ID: " + res.roomId + ")");
+				    } else {
+				        System.out.println("Failed to create room: " + res.message);
+				    }
+				    return;
+				}
+
+				if (object instanceof ListRoomsResponse) {
+				    ListRoomsResponse res = (ListRoomsResponse) object;
+				    if (res.rooms.length == 0) {
+				        System.out.println("No rooms available.");
+				    } else {
+				        System.out.println("Available rooms:");
+				        for (RoomInfo r : res.rooms) {
+				            System.out.println("  [" + r.id + "] " + r.name + " (by " + r.creator + ")");
+				        }
+				    }
+				    return;
+				}
+
+				if (object instanceof JoinRoomResponse) {
+				    JoinRoomResponse res = (JoinRoomResponse) object;
+				    if (res.success) {
+				        System.out.println("Joined room. Last 10 messages:");
+				        if (res.last10Messages != null && res.last10Messages.length > 0) {
+				            for (StoredMessage msg : res.last10Messages) {
+				                System.out.println("[" + msg.id + "] " + msg.author + ": " + msg.text +
+				                    (msg.edited ? " [Edited]" : ""));
+				            }
+				        } else {
+				            System.out.println("(No messages yet)");
+				        }
+				    } else {
+				        System.out.println("Failed to join room: " + res.message);
+				    }
+				    return;
 				}
 			}
 			
@@ -124,16 +181,23 @@ public class ChatClient implements Runnable{
 				
 	            while (running) {
 	            	userInput = stdIn.readLine();
-	            	if (userInput == null || "BYE".equalsIgnoreCase(userInput)) // userInput - tekst koji je unet sa tastature!
-	            	{
-	            		running = false;
-	            	}
-	            	else if ("WHO".equalsIgnoreCase(userInput)){
-	            		client.sendTCP(new WhoRequest());
-	            	}							
-	            	else {
-	            		ChatMessage message = new ChatMessage(userName, userInput);
-	            		client.sendTCP(message);
+	            	if (userInput == null || "BYE".equalsIgnoreCase(userInput)) {
+	            	    running = false;
+	            	} else if ("WHO".equalsIgnoreCase(userInput)) {
+	            	    client.sendTCP(new WhoRequest());
+	            	} else if (userInput.startsWith("/create ")) {
+	            	    String roomName = userInput.substring(8).trim();
+	            	    client.sendTCP(new CreateRoomRequest(roomName, userName));
+	            	} else if ("/listrooms".equalsIgnoreCase(userInput)) {
+	            	    client.sendTCP(new ListRoomsRequest());
+	            	} else if (userInput.startsWith("/join ")) {
+	            	    String roomId = userInput.substring(6).trim();
+	            	    client.sendTCP(new JoinRoomRequest(roomId, userName));
+	            	} else {
+	            	    // Obicna poruka – saljemo u trenutnu sobu (kasnije cemo pratiti aktivnu sobu)
+	            	    ChatMessage message = new ChatMessage(userName, userInput);
+	            	    // Za sada saljemo bez roomId
+	            	    client.sendTCP(message);
 	            	}
 	            	
 	            	if (!client.isConnected() && running)
