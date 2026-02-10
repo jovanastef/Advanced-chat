@@ -48,6 +48,7 @@ public class ChatClient implements Runnable{
 	private String currentRoomId = null;
 	private int currentHistoryPage = 0;
 	
+	
 	public ChatClient(String hostName, int portNumber, String userName) {
 		this.client = new Client(DEFAULT_CLIENT_WRITE_BUFFER_SIZE, DEFAULT_CLIENT_READ_BUFFER_SIZE);
 		
@@ -62,6 +63,7 @@ public class ChatClient implements Runnable{
 		client.getKryo().register(JoinRoomRequest.class);
 		client.getKryo().register(JoinRoomResponse.class);
 		client.getKryo().register(RoomInfo.class);
+		client.getKryo().register(StoredMessage.class);
 		client.getKryo().register(StoredMessage[].class);
 		client.getKryo().register(LoadHistoryRequest.class);
 		client.getKryo().register(LoadHistoryResponse.class);
@@ -80,9 +82,13 @@ public class ChatClient implements Runnable{
 			
 			public void received (Connection connection, Object object) {
 				if (object instanceof ChatMessage) {
-					ChatMessage chatMessage = (ChatMessage)object;
-					showChatMessage(chatMessage);
-					return;
+				    ChatMessage msg = (ChatMessage) object;
+				    if (msg.replyToId != null) {
+				        System.out.println("[" + msg.id + "] " + msg.user + " replied to " + msg.replyToId + ": " + msg.txt);
+				    } else {
+				        System.out.println("[" + msg.id + "] " + msg.user + ": " + msg.txt);
+				    }
+				    return;
 				}
 
 				if (object instanceof ListUsers) {
@@ -94,17 +100,6 @@ public class ChatClient implements Runnable{
 				if (object instanceof InfoMessage) {
 					InfoMessage message = (InfoMessage)object;
 					showMessage("Server:"+message.getTxt());
-					return;
-				}
-				
-				if (object instanceof ChatMessage) {
-					ChatMessage message = (ChatMessage)object;
-					// Ako je reply, pokusaj da nadjes originalnu poruku (opciono)
-				    if (message.replyToId != null) {
-				        System.out.println("[" + message.id + "] " + message.user + " replied to " + message.replyToId + ": " + message.txt);
-				    } else {
-				        System.out.println("[" + message.id + "] " + message.user + ": " + message.txt);
-				    }
 					return;
 				}
 				
@@ -201,9 +196,13 @@ public class ChatClient implements Runnable{
 			}
 		});
 	}
-	private void showChatMessage(ChatMessage chatMessage) {
-		System.out.println(chatMessage.getUser()+":"+chatMessage.getTxt());
-	}
+	//private void showChatMessage(ChatMessage chatMessage) {
+	  //  if (chatMessage.replyToId != null) {
+	    //    System.out.println("[" + chatMessage.id + "] " + chatMessage.user + " replied to " + chatMessage.replyToId + ": " + chatMessage.txt);
+	   // } else {
+	     //   System.out.println("[" + chatMessage.id + "] " + chatMessage.user + ": " + chatMessage.txt);
+	    //}
+	//}
 	private void showMessage(String txt) {
 		System.out.println(txt);
 	}
@@ -218,6 +217,8 @@ public class ChatClient implements Runnable{
 	public void start() throws IOException {
 		client.start();
 		connect();
+		
+		running = true;
 		
 		if (thread == null) {
 			thread = new Thread(this);
@@ -344,7 +345,10 @@ public class ChatClient implements Runnable{
         try{
         	ChatClient chatClient = new ChatClient(hostName, portNumber, userName);
         	chatClient.start();
-        }catch(IOException e) {
+        	
+        	// cekaj dok se klijent ne zatvori
+            chatClient.thread.join();
+        }catch(IOException | InterruptedException e) {
         	e.printStackTrace();
         	System.err.println("Error:"+e.getMessage());
         	System.exit(-1);

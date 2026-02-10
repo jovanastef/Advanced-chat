@@ -59,6 +59,7 @@ public class ChatServer implements Runnable{
 		server.getKryo().register(JoinRoomRequest.class);
 		server.getKryo().register(JoinRoomResponse.class);
 		server.getKryo().register(RoomInfo.class);
+		server.getKryo().register(StoredMessage.class);
 		server.getKryo().register(StoredMessage[].class);
 		server.getKryo().register(LoadHistoryRequest.class);
 		server.getKryo().register(LoadHistoryResponse.class);
@@ -122,7 +123,7 @@ public class ChatServer implements Runnable{
 				        roomMsgList.add(storedForRoom);
 				    }
 
-				    // Prosledi poruku SAMO korisnicima u toj sobi
+				    // Prosledi poruku SVIM clanovima sobe, UKLJUCUJUCI posiljaoca (zbog id poruke)
 				    Set<String> usersInRoom = new HashSet<>();
 				    for (Map.Entry<String, Set<String>> entry : userRooms.entrySet()) {
 				        if (entry.getValue().contains(chatMsg.roomId)) {
@@ -132,7 +133,7 @@ public class ChatServer implements Runnable{
 
 				    for (String user : usersInRoom) {
 				        Connection conn = userConnectionMap.get(user);
-				        if (conn != null && conn.isConnected() && conn != connection) {
+				        if (conn != null && conn.isConnected()) {
 				            conn.sendTCP(chatMsg);
 				        }
 				    }
@@ -201,6 +202,7 @@ public class ChatServer implements Runnable{
 				    List<StoredMessage> last10 = new ArrayList<>(messages.subList(fromIndex, messages.size()));
 				    res.last10Messages = last10.toArray(new StoredMessage[0]);
 				    res.success = true;
+				    res.roomId = req.roomId;
 				    connection.sendTCP(res);
 				    System.out.println(req.userName + " joined room " + room.name);
 				    return;
@@ -278,6 +280,7 @@ public class ChatServer implements Runnable{
 
 				    // Prosledi svim online primaocima
 				    for (String recipient : gm.recipients) {
+				    	System.out.println("Sending group msg to: '" + recipient + "'"); //debug
 				        Connection conn = userConnectionMap.get(recipient);
 				        if (conn != null && conn.isConnected()) {
 				            conn.sendTCP(gm);
